@@ -93,7 +93,7 @@
 
 #define tmp		%r10
 #define	DDQ(i)		CONCAT(ddq_add_,i)
-#define	XMM(i)		CONCAT(%xmm, i)
+#define	XMM(i)		CONCAT(%xmm,i)
 #define	DDQ_DATA	0
 #define	XDATA		1
 #define KEY_128		1

@@ -1,0 +1,2 @@
+in buildEXT4
+1,$s/clang /clang -emit-llvm /gc

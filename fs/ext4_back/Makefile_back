@@ -1,0 +1,49 @@
+#
+# Makefile for the linux ext4-filesystem routines.
+#
+
+#obj-$(CONFIG_EXT4_FS) += ext4.o
+
+ext4-y	:= balloc.o bitmap.o dir.o file.o fsync.o ialloc.o inode.o page-io.o \
+		ioctl.o namei.o super.o symlink.o hash.o resize.o extents.o \
+		ext4_jbd2.o migrate.o mballoc.o block_validity.o move_extent.o \
+		mmp.o indirect.o extents_status.o xattr.o xattr_user.o \
+		xattr_trusted.o inline.o readpage.o sysfs.o acl.o xattr_security.o
+
+ext4-$(CONFIG_EXT4_FS_POSIX_ACL)	+= acl.o
+ext4-$(CONFIG_EXT4_FS_SECURITY)		+= xattr_security.o
+ext4-$(CONFIG_EXT4_FS_ENCRYPTION)	+= crypto_policy.o crypto.o \
+		crypto_key.o crypto_fname.o
+
+ifndef KERNEL_SOURCE
+KERNEL_SOURCE := /lib/modules/$(shell uname -r)
+endif
+
+FSLICE_FLAGS := -Wp,-MD -nostdinc -isystem /usr/local/bin/../lib/clang/3.8.1/include -I./arch/x86/include -Iarch/x86/include/generated/uapi -Iarch/x86/include/generated  -Iinclude -I./arch/x86/include/uapi -Iarch/x86/include/generated/uapi -I./include/uapi -Iinclude/generated/uapi -include ./include/linux/kconfig.h -D__KERNEL__ -Qunused-arguments -Wno-unknown-warning-option -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -std=gnu89 -no-integrated-as -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -mno-avx -m64 -mtune=generic -mno-red-zone -mcmodel=kernel -funit-at-a-time -DCONFIG_X86_X32_ABI -DCONFIG_AS_CFI=1 -DCONFIG_AS_CFI_SIGNAL_FRAME=1 -DCONFIG_AS_CFI_SECTIONS=1 -DCONFIG_AS_FXSAVEQ=1 -DCONFIG_AS_SSSE3=1 -DCONFIG_AS_CRC32=1 -DCONFIG_AS_AVX=1 -DCONFIG_AS_AVX2=1 -DCONFIG_AS_SHA1_NI=1 -DCONFIG_AS_SHA256_NI=1 -pipe -Wno-sign-compare -fno-asynchronous-unwind-tables -O2 -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-variable -Wno-format-invalid-specifier -Wno-gnu -Wno-asm-operand-widths -Wno-initializer-overrides -fno-builtin -Wno-tautological-compare -mno-global-merge -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -Werror=implicit-int -Werror=strict-prototypes -Werror=date-time -Wno-initializer-overrides -Wno-unused-value -Wno-format -Wno-unknown-warning-option -Wno-sign-compare -Wno-format-zero-length -Wno-uninitialized 
+
+#PROGS := $(patsubst %.o,%.c,$(ext4-y))
+EXECS := $(patsubst %.o,%.bc,$(ext4-y))
+
+KERNEL_SOURCE := /lib/modules/$(shell uname -r)
+
+FSLICE_SRC_DIR := /home/fslice/fslice
+
+ext4-objs := $(ext4-y) $(ext4-$(CONFIG_EXT4_FS_POSIX_ACL)) $(ext4-$(CONFIG_EXT4_FS_SECURITY))
+obj-m += ext4.o
+
+all: $(EXECS) fslice_opt
+%.bc: %.c
+	cd ../../ &&\
+	clang -S -emit-llvm $(FSLICE_FLAGS) -DMODULE  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(acl)"  -D"KBUILD_MODNAME=KBUILD_STR(ext4)" fs/ext4/$< -o fs/ext4/$@
+
+fslice_opt:
+	cd ../../ &&\
+	llvm-link fs/ext4/*.bc -o fs/ext4/ext4.bc &&\
+	/usr/local/bin/opt -load $(FSLICE_SRC_DIR)/build/FSlice.so -constprop -sccp -mergereturn -sink -licm -reg2mem -fslice -reg2mem fs/ext4/ext4.bc -o fs/ext4/ext4.inst.bc &&\
+	llvm-link -o=fs/ext4/ext4.inst2.bc $(FSLICE_SRC_DIR)/build/libFSlice.bc fs/ext4/ext4.inst.bc &&\
+	/usr/local/bin/opt fs/ext4/ext4.inst2.bc -o fs/ext4/ext4.opt.bc &&\
+	clang -c fs/ext4/ext4.opt.bc -o fs/ext4/ext4.o &&\
+	make -C $(KERNEL_SOURCE)/build M=$(PWD) CC=clang HOSTCC=clang modules
+
+clean:
+	rm -f $(EXECS) $(ext4-y) ext4.*o *.bc *.d

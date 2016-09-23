@@ -1,0 +1,10 @@
+obj-m += helloworld.o 
+
+helloworld-objs := hello.o world.o
+
+all: 
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) hello.o 
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) helloworld.ko
+
+clean: 
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
